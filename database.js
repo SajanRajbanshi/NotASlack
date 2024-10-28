@@ -1,7 +1,17 @@
 
+const dotenv=require("dotenv");
+
 const mongoose=require("mongoose");
 
-mongoose.connect(process.env.MONGODB || "mongodb+srv://sasararasajanpersonal:papjpmmw@cluster.cz96uup.mongodb.net/slack");
+if(process.env.NODE_ENV==="test")
+{
+  dotenv.config({path:".env.test"});
+}
+else
+{
+  dotenv.config();
+}
+mongoose.connect(process.env.MONGODB);
 
 const db=mongoose.connection
 

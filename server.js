@@ -10,7 +10,7 @@ const Channel = require("./model/channel.model");
 const Message = require("./model/message.model");
 const User = require("./model/user.model");
 const Workspace = require("./model/workspace.model");
-require("dotenv").config();
+const dotenv=require("dotenv");
 const channelRouter = require("./routes/channel.routes");
 const messageRouter = require("./routes/message.routes");
 const workspaceRouter = require("./routes/workspace.routes");
@@ -22,6 +22,16 @@ app.use("/users", userRouter);
 app.use("/workspaces", workspaceRouter);
 app.use("/channels", channelRouter);
 app.use("/messages", messageRouter);
+
+if(process.env.NODE_ENV==="test")
+{
+  dotenv.config({path:".env.test"});
+}
+else
+{
+  dotenv.config();
+}
+
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -67,10 +77,29 @@ io.on("connection", (socket) => {
     socket.emit("channels-joined", true);
   });
 
-  socket.on("join-new-channel", (userId, channelId) => {
-    socket.join(channelId);
-    socket.emit("channel-joined", { status: true, message: "channel joined" });
-    addChannelToUser(userId, channelId);
+  socket.on("join-new-channel",async (token, workspaceId,channelId) => {
+   try{ socket.join(channelId);
+    const userData = jwt.verify(
+      token,
+      process.env.SECRET_KEY,
+      (err, decoded) => {
+        if (err) {
+          console.log(
+            "error occured while verifying token in send-message event" + err
+          );
+          return {};
+        }
+        return { userId: decoded.userId, email: decoded.email };
+      }
+    );
+    const joiningChannel=await Channel.findOne({_id:channelId});
+    await addChannelToUser(userData.userId, channelId);
+    socket.emit("channel-joined",joiningChannel);}
+    catch(err)
+    {
+      console.log(err);
+      socket.emit("channel-joining-failed",{err:err});
+    }
   });
 
   socket.on("create-new-channel", async (token, channelName, workspaceId) => {
@@ -193,7 +222,7 @@ async function addNewChannel(userId, channelName, workspaceId) {
 }
 
 async function addChannelToUser(userId, channelId) {
-  const isChannelArreadyCreated = await Channel.findOne({ name: channelId });
+  const isChannelArreadyCreated = await Channel.findOne({ _id: channelId });
   if (isChannelArreadyCreated) {
     const userHasThatChannel = await User.findOne({
       channels: channelId,
@@ -205,7 +234,7 @@ async function addChannelToUser(userId, channelId) {
     }
     User.findOneAndUpdate(
       { _id: userId },
-      { $push: { channels: isChannelArreadyCreated.name } }
+      { $push: { channels: isChannelArreadyCreated._id } }
     )
       .then(() => {
         console.log("channel saved to user");

@@ -1,4 +1,4 @@
-const db = require("../database");
+// const db = require("../database");
 const User = require("../model/user.model");
 const sendMail = require("../scripts/sendMail");
 const Otp = require("../model/Otp.model");
@@ -6,16 +6,34 @@ const jwt = require("jsonwebtoken");
 const Workspace = require("../model/workspace.model");
 const Channel = require("../model/channel.model");
 
-function auth(req, res) {
-  sendMail(req.body.email);
-  res.status(200).send({ status: true, message: "OTP sent to this mail id" });
+async function auth(req, res) {
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(req.body.email)) {
+    return res
+      .status(401)
+      .send({ status: false, message: "enter a valid email" });
+  }
+  await sendMail(req.body.email);
+  res.status(200).send({ status: true, message: "otp sent to this email id" });
 }
 
-// send code and email in the body
 function verifyOtp(req, res) {
   console.log(req.body.email, req.body.code);
+  if (!req.body.email || !req.body.code) {
+    return res.status(401).send({
+      status: false,
+      message: "request doesn't contain proper payload",
+    });
+  }
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(req.body.email)) {
+    return res
+      .status(401)
+      .send({ status: false, message: "enter a valid email" });
+  }
   Otp.findOne({ code: req.body.code, destination: req.body.email })
     .then(async (data) => {
+      deleteOtp(req);
       console.log(data);
       if (data) {
         const isOldUser = await User.findOne({ email: req.body.email });
@@ -27,7 +45,7 @@ function verifyOtp(req, res) {
             },
             process.env.SECRET_KEY
           );
-          res.status(200).send({
+          return res.status(200).send({
             status: true,
             message: "otp verified",
             isOldUser: true,
@@ -35,19 +53,25 @@ function verifyOtp(req, res) {
             name: isOldUser.name,
           });
         } else {
-          res.status(200).send({
+          return res.status(200).send({
             status: true,
-            message: "OTP verified",
+            message: "otp verified",
             isOldUser: false,
           });
         }
       } else {
-        res.status(401).send({ status: false, message: "OTP did not match" });
+        return res
+          .status(401)
+          .send({ status: false, message: "email or otp did not match" });
       }
     })
     .catch((err) => {
       res.status(500).send({ status: false, message: "server error" });
+      deleteOtp(req);
     });
+}
+
+function deleteOtp(req) {
   Otp.deleteOne({ code: req.body.code, destination: req.body.email })
     .then((data) => {
       console.log("used otp deleted");
@@ -59,6 +83,21 @@ function verifyOtp(req, res) {
 
 // send username and workspace in the body and email
 async function signup(req, res) {
+  console.log("signup api is hit");
+  if (!req.body.name || !req.body.workspace || !req.body.email) {
+    return res
+      .status(401)
+      .send({
+        status: false,
+        message: "request doesn't contain proper payload",
+      });
+  }
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(req.body.email)) {
+    return res
+      .status(401)
+      .send({ status: false, message: "enter a valid email" });
+  }
   const newUser = new User({
     email: req.body.email,
     workspaces: [],
@@ -76,7 +115,7 @@ async function signup(req, res) {
     channels: [],
     author: userData._id,
     doc: new Date(),
-    users:[]
+    users: [],
   });
   const workspaceData = await newWorkspace.save();
   const defaultChannel1 = new Channel({
@@ -140,4 +179,3 @@ async function signup(req, res) {
 }
 
 module.exports = { auth, verifyOtp, signup };
-

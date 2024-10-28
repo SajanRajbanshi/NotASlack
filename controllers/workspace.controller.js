@@ -4,6 +4,12 @@ const User = require("../model/user.model");
 function getWorkspaces(req, res) {
   console.log("get workspaces api fired");
   console.log(req.userId);
+  if (!req.userId) {
+    return res.status(401).send({
+      status: false,
+      message: "token doesn't contain sufficient information",
+    });
+  }
   User.findOne({ _id: req.userId })
     .populate("workspaces")
     .then((data) => {
@@ -24,10 +30,24 @@ function getWorkspaces(req, res) {
 
 function getCoworkers(req, res) {
   console.log("get coworker api fired");
+  if(!req.userId || !req.email)
+  {
+    return res.status(403).send({status:false,message:"token doesn't contain sufficient information"})
+  }
+  if(!req.body.workspaceId)
+  {
+    return res.status(403).send({status:false,message:"workspace id not provided"});
+  }
   Workspace.findOne({ _id: req.body.workspaceId })
     .populate("users")
     .then((data) => {
-      res.status(200).send({ status: true, users: data.users });
+      if (data) {
+        return res.status(200).send({ status: true, users: data.users });
+      } else {
+        return res
+          .status(404)
+          .send({ status: false, message: "workspace not found" });
+      }
     })
     .catch((err) => {
       res
@@ -36,4 +56,4 @@ function getCoworkers(req, res) {
     });
 }
 
-module.exports = {getWorkspaces,getCoworkers};
+module.exports = { getWorkspaces, getCoworkers };
